@@ -1,6 +1,12 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { getAvatarDefinition } from '../../pages/__stubs__/avatarAdapter'
 import { AvatarPreview } from './AvatarPreview'
+import {
+  detectFaceCoordinates,
+  extractFaceToCanvas,
+  type DetectedFaceBox,
+  type FaceCropSettings,
+} from './faceExtractor'
 
 interface CustomCharacterModalProps {
   currentPhoto: string | null
@@ -18,25 +24,41 @@ export function CustomCharacterModal({
   const [activeTab, setActiveTab] = useState<'camera' | 'upload'>('camera')
   const [stream, setStream] = useState<MediaStream | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
-  const [previewPhoto, setPreviewPhoto] = useState<string | null>(currentPhoto)
-  const [isCapturing, setIsCapturing] = useState(false)
+
+  // Raw source image (from camera snap or file upload)
+  const [rawPhotoUrl, setRawPhotoUrl] = useState<string | null>(null)
+  const [detectedFace, setDetectedFace] = useState<DetectedFaceBox | null>(null)
+  const [isDetectingFace, setIsDetectingFace] = useState(false)
+
+  // Extracted face image for the spacesuit
+  const [extractedFaceUrl, setExtractedFaceUrl] = useState<string | null>(currentPhoto)
+
+  // Face alignment settings
+  const [settings, setSettings] = useState<FaceCropSettings>({
+    zoom: 1.0,
+    panX: 0,
+    panY: 0,
+    feather: true,
+  })
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const rawImageRef = useRef<HTMLImageElement | null>(null)
 
-  // Start webcam when camera tab is active
+  // Start webcam when camera tab is active and not adjusting
   useEffect(() => {
     let currentStream: MediaStream | null = null
 
-    if (activeTab === 'camera' && !isCapturing) {
-      navigator.mediaDevices?.getUserMedia({
-        video: {
-          facingMode: 'user',
-          width: { ideal: 640 },
-          height: { ideal: 640 },
-        },
-      })
+    if (activeTab === 'camera' && !rawPhotoUrl) {
+      navigator.mediaDevices
+        ?.getUserMedia({
+          video: {
+            facingMode: 'user',
+            width: { ideal: 640 },
+            height: { ideal: 640 },
+          },
+        })
         .then((mediaStream) => {
           currentStream = mediaStream
           setStream(mediaStream)
@@ -59,7 +81,7 @@ export function CustomCharacterModal({
         currentStream.getTracks().forEach((track) => track.stop())
       }
     }
-  }, [activeTab, isCapturing])
+  }, [activeTab, rawPhotoUrl])
 
   // Stop camera stream when component unmounts
   useEffect(() => {
@@ -70,39 +92,87 @@ export function CustomCharacterModal({
     }
   }, [stream])
 
+  // Process and extract face onto canvas
+  const processFaceExtraction = useCallback(
+    (img: HTMLImageElement, faceBox?: DetectedFaceBox | null, customSettings?: FaceCropSettings) => {
+      if (!canvasRef.current) return
+      const s = customSettings ?? settings
+      const extracted = extractFaceToCanvas(img, s, canvasRef.current, faceBox ?? detectedFace)
+      if (extracted) {
+        setExtractedFaceUrl(extracted)
+      }
+    },
+    [settings, detectedFace]
+  )
+
+  // Update extracted face when zoom or pan changes
+  useEffect(() => {
+    if (rawImageRef.current) {
+      processFaceExtraction(rawImageRef.current, detectedFace, settings)
+    }
+  }, [settings, detectedFace, processFaceExtraction])
+
+  // Detect face on a new raw image
+  const handleRawPhotoLoaded = async (dataUrl: string) => {
+    setRawPhotoUrl(dataUrl)
+    setIsDetectingFace(true)
+
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = async () => {
+      rawImageRef.current = img
+      const box = await detectFaceCoordinates(img)
+      setDetectedFace(box)
+      setIsDetectingFace(false)
+
+      const initialSettings: FaceCropSettings = {
+        zoom: box ? 1.05 : 1.0,
+        panX: 0,
+        panY: 0,
+        feather: true,
+      }
+      setSettings(initialSettings)
+      processFaceExtraction(img, box, initialSettings)
+    }
+    img.src = dataUrl
+  }
+
   const handleSnapPhoto = () => {
     const video = videoRef.current
-    const canvas = canvasRef.current
-    if (!video || !canvas) return
+    if (!video) return
 
     const size = Math.min(video.videoWidth || 480, video.videoHeight || 480)
-    canvas.width = 320
-    canvas.height = 320
-    const ctx = canvas.getContext('2d')
+    const snapCanvas = document.createElement('canvas')
+    snapCanvas.width = size
+    snapCanvas.height = size
+    const ctx = snapCanvas.getContext('2d')
     if (!ctx) return
 
-    // Center crop square and mirror horizontal for natural selfie feel
     const startX = ((video.videoWidth || 480) - size) / 2
     const startY = ((video.videoHeight || 480) - size) / 2
 
-    ctx.translate(canvas.width, 0)
+    // Mirror for natural selfie orientation
+    ctx.translate(snapCanvas.width, 0)
     ctx.scale(-1, 1)
-    ctx.drawImage(video, startX, startY, size, size, 0, 0, canvas.width, canvas.height)
+    ctx.drawImage(video, startX, startY, size, size, 0, 0, snapCanvas.width, snapCanvas.height)
 
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
-    setPreviewPhoto(dataUrl)
-    setIsCapturing(true)
+    const dataUrl = snapCanvas.toDataURL('image/jpeg', 0.9)
 
     // Stop camera track after capture
     if (stream) {
       stream.getTracks().forEach((track) => track.stop())
       setStream(null)
     }
+
+    handleRawPhotoLoaded(dataUrl)
   }
 
   const handleRetake = () => {
-    setIsCapturing(false)
-    setPreviewPhoto(currentPhoto)
+    setRawPhotoUrl(null)
+    rawImageRef.current = null
+    setDetectedFace(null)
+    setExtractedFaceUrl(currentPhoto)
+    setSettings({ zoom: 1.0, panX: 0, panY: 0, feather: true })
   }
 
   const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
@@ -112,16 +182,15 @@ export function CustomCharacterModal({
     const reader = new FileReader()
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        setPreviewPhoto(reader.result)
-        setIsCapturing(true)
+        handleRawPhotoLoaded(reader.result)
       }
     }
     reader.readAsDataURL(file)
   }
 
   const handleConfirm = () => {
-    if (previewPhoto) {
-      onSave(previewPhoto)
+    if (extractedFaceUrl) {
+      onSave(extractedFaceUrl)
       onClose()
     }
   }
@@ -147,44 +216,42 @@ export function CustomCharacterModal({
 
         <header className="custom-character-modal__header">
           <span className="eyebrow">MISSION CONTROL · CADET SUIT FITTER</span>
-          <h2 id="custom-modal-title">Customize Your Astronaut Face</h2>
+          <h2 id="custom-modal-title">Extract Face & Fit Astronaut Suit</h2>
           <p>
-            Put yourself in the spacesuit! Take a quick photo with your camera or upload a picture
-            to wear it on your astronaut’s visor during Mars missions.
+            {rawPhotoUrl
+              ? 'Align and fit your face inside the spacesuit visor. We remove the background so your face is seamlessly placed into your astronaut helmet!'
+              : 'Take a photo with your camera or upload a picture to extract your face into the spacesuit visor.'}
           </p>
         </header>
 
         <div className="custom-character-modal__body">
-          {/* Left: Camera / Upload Controls */}
+          {/* Left Column: Camera / Upload OR Face Alignment Studio */}
           <div className="custom-character-modal__source">
-            <div className="custom-character-tabs" role="tablist">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === 'camera'}
-                className={`custom-tab-btn ${activeTab === 'camera' ? 'custom-tab-btn--active' : ''}`}
-                onClick={() => {
-                  setActiveTab('camera')
-                  setIsCapturing(false)
-                }}
-              >
-                📷 Open Camera
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === 'upload'}
-                className={`custom-tab-btn ${activeTab === 'upload' ? 'custom-tab-btn--active' : ''}`}
-                onClick={() => setActiveTab('upload')}
-              >
-                📁 Upload Photo
-              </button>
-            </div>
+            {!rawPhotoUrl ? (
+              <>
+                <div className="custom-character-tabs" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'camera'}
+                    className={`custom-tab-btn ${activeTab === 'camera' ? 'custom-tab-btn--active' : ''}`}
+                    onClick={() => setActiveTab('camera')}
+                  >
+                    📷 Open Camera
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'upload'}
+                    className={`custom-tab-btn ${activeTab === 'upload' ? 'custom-tab-btn--active' : ''}`}
+                    onClick={() => setActiveTab('upload')}
+                  >
+                    📁 Upload Photo
+                  </button>
+                </div>
 
-            {activeTab === 'camera' && (
-              <div className="camera-viewport-card">
-                {!isCapturing ? (
-                  <>
+                {activeTab === 'camera' && (
+                  <div className="camera-viewport-card">
                     {cameraError ? (
                       <div className="camera-error-box">
                         <p>{cameraError}</p>
@@ -207,7 +274,7 @@ export function CustomCharacterModal({
                         />
                         <div className="camera-face-guide">
                           <span className="face-oval-guide" />
-                          <small>Align face inside helmet guide</small>
+                          <small>Center face inside helmet guide</small>
                         </div>
                       </div>
                     )}
@@ -217,76 +284,115 @@ export function CustomCharacterModal({
                       disabled={Boolean(cameraError)}
                       onClick={handleSnapPhoto}
                     >
-                      📸 Snap Photo
+                      📸 Snap & Extract Face
                     </button>
-                  </>
-                ) : (
-                  <div className="camera-snap-preview">
-                    <img src={previewPhoto!} alt="Snapped face" className="snapped-img" />
-                    <div className="snap-actions">
-                      <button type="button" className="secondary-button" onClick={handleRetake}>
-                        🔄 Retake
-                      </button>
-                    </div>
                   </div>
                 )}
-              </div>
-            )}
 
-            {activeTab === 'upload' && (
-              <div className="upload-viewport-card">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileUpload}
-                  style={{ display: 'none' }}
-                />
-                <button
-                  type="button"
-                  className="upload-dropzone"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <span className="upload-icon">📂</span>
-                  <strong>Choose a photo from your device</strong>
-                  <small>JPG, PNG, WebP supported</small>
-                </button>
-
-                {previewPhoto && (
-                  <div className="upload-photo-preview">
-                    <img src={previewPhoto} alt="Uploaded face" className="snapped-img" />
+                {activeTab === 'upload' && (
+                  <div className="upload-viewport-card">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileUpload}
+                      style={{ display: 'none' }}
+                    />
                     <button
                       type="button"
-                      className="secondary-button small-btn"
+                      className="upload-dropzone"
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      Change Photo
+                      <span className="upload-icon">📂</span>
+                      <strong>Choose a photo with your face</strong>
+                      <small>JPG, PNG, WebP supported</small>
                     </button>
                   </div>
                 )}
+              </>
+            ) : (
+              /* Face Alignment & Extraction Studio */
+              <div className="face-align-studio">
+                <div className="face-align-header">
+                  <span className="section-kicker">
+                    {isDetectingFace ? 'DETECTING FACE...' : detectedFace ? '✓ FACE DETECTED & CENTERED' : 'ADJUST FACE FIT'}
+                  </span>
+                  <button type="button" className="secondary-button small-btn" onClick={handleRetake}>
+                    🔄 Retake / Change
+                  </button>
+                </div>
+
+                {/* Extracted Face Canvas Preview */}
+                <div className="face-canvas-wrap">
+                  <canvas ref={canvasRef} className="extracted-face-canvas" />
+                  <div className="face-visor-overlay-ring" />
+                </div>
+
+                {/* Alignment Sliders */}
+                <div className="face-adjust-controls">
+                  <label className="adjust-slider-row">
+                    <span>🔍 Face Size / Zoom:</span>
+                    <input
+                      type="range"
+                      min="0.7"
+                      max="2.0"
+                      step="0.05"
+                      value={settings.zoom}
+                      onChange={(e) =>
+                        setSettings((prev) => ({ ...prev, zoom: parseFloat(e.target.value) }))
+                      }
+                    />
+                  </label>
+
+                  <label className="adjust-slider-row">
+                    <span>↕️ Vertical Position:</span>
+                    <input
+                      type="range"
+                      min="-70"
+                      max="70"
+                      step="2"
+                      value={settings.panY}
+                      onChange={(e) =>
+                        setSettings((prev) => ({ ...prev, panY: parseInt(e.target.value, 10) }))
+                      }
+                    />
+                  </label>
+
+                  <label className="adjust-slider-row">
+                    <span>↔️ Horizontal Position:</span>
+                    <input
+                      type="range"
+                      min="-70"
+                      max="70"
+                      step="2"
+                      value={settings.panX}
+                      onChange={(e) =>
+                        setSettings((prev) => ({ ...prev, panX: parseInt(e.target.value, 10) }))
+                      }
+                    />
+                  </label>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Right: Live Astronaut Suit Preview */}
+          {/* Right Column: Live Astronaut Suit Preview */}
           <div className="custom-character-modal__preview">
-            <span className="section-kicker">SUIT VISOR PREVIEW</span>
+            <span className="section-kicker">SPACESUIT VISOR PREVIEW</span>
             <div className="preview-astronaut-box">
               <AvatarPreview
                 avatar={customAvatarDef}
-                customPhotoUrl={previewPhoto}
+                customPhotoUrl={extractedFaceUrl}
               />
               <span className="preview-cadet-name">Cadet You</span>
               <p className="preview-help">
-                {previewPhoto
-                  ? 'Great fit! Your photo will be shown inside your visor across Aster Base and in 3D Mars exploration.'
-                  : 'Take or choose a photo to see your astronaut suit.'}
+                {extractedFaceUrl
+                  ? 'Your extracted face is blended inside the helmet visor across all Aster Base menus, HUDs, and 3D exploration.'
+                  : 'Capture or upload a photo to extract your face into the astronaut suit.'}
               </p>
             </div>
           </div>
         </div>
-
-        <canvas ref={canvasRef} style={{ display: 'none' }} />
 
         <footer className="custom-character-modal__footer">
           {currentPhoto && (
@@ -295,7 +401,7 @@ export function CustomCharacterModal({
               className="danger-button"
               onClick={() => {
                 onClear()
-                setPreviewPhoto(null)
+                setExtractedFaceUrl(null)
                 onClose()
               }}
             >
@@ -308,10 +414,10 @@ export function CustomCharacterModal({
           <button
             type="button"
             className="primary-button"
-            disabled={!previewPhoto}
+            disabled={!extractedFaceUrl}
             onClick={handleConfirm}
           >
-            Equip My Astronaut 🚀
+            Add to Astronaut 🚀
           </button>
         </footer>
       </div>
