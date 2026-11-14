@@ -1667,3 +1667,226 @@
   white-space: nowrap;
 }
 
+/* ==========================================================================
+   Pre-Mission Space Academy & Knowledge Badges
+   ========================================================================== */
+
+.home-topbar-actions, .library-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.home-ai-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 99px;
+  background: linear-gradient(135deg, rgba(240, 200, 104, 0.2), rgba(85, 189, 235, 0.25));
+  border: 1px solid var(--yellow-400);
+  color: var(--white);
+  cursor: pointer;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.home-ai-pill-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(240, 200, 104, 0.35);
+}
+
+.home-ai-pill-btn span {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--yellow-400);
+}
+
+.home-ai-pill-btn small {
+  font-size: 0.65rem;
+  color: #adbde2;
+  text-transform: uppercase;
+}
+
+.home-hero-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.home-ask-ai-cta, .library-ask-ai-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.6rem 1.3rem;
+  border-radius: 16px;
+  border: 1px solid rgba(240, 200, 104, 0.45);
+  background: linear-gradient(135deg, rgba(240, 200, 104, 0.15), rgba(17, 24, 78, 0.6));
+  cursor: pointer;
+  transition: all 180ms ease;
+}
+
+.home-ask-ai-cta:hover, .library-ask-ai-btn:hover {
+  transform: translateY(-2px);
+  border-color: var(--yellow-400);
+  box-shadow: 0 6px 20px rgba(240, 200, 104, 0.25);
+}
+
+.home-ask-ai-cta span, .library-ask-ai-btn span {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--yellow-400);
+}
+
+.home-ask-ai-cta small, .library-ask-ai-btn small {
+  font-size: 0.7rem;
+  color: #c4d0f0;
+}
+
+/* Badge Collector Bar */
+.astro-badges-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 1rem;
+  background: rgba(8, 13, 45, 0.75);
+  border-bottom: 1px solid var(--line);
+}
+
+.astro-badges-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+}
+
+.astro-badges-icon {
+  font-size: 1.1rem;
+}
+
+.astro-badges-count {
+  padding: 0.15rem 0.5rem;
+  border-radius: 99px;
+  background: rgba(240, 200, 104, 0.18);
+  border: 1px solid var(--yellow-400);
+  color: var(--yellow-400);
+  font-weight: 800;
+  font-size: 0.7rem;
+}
+
+.astro-badge-toggle-btn {
+  background: transparent;
+  border: 0;
+  color: var(--blue-500);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* Badge Showcase Deck */
+.astro-badge-deck {
+  padding: 0.85rem 1rem;
+  background: rgba(17, 24, 78, 0.9);
+  border-bottom: 1px solid var(--line);
+  animation: picker-in 140ms ease-out;
+}
+
+.astro-badge-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+}
+
+@media (max-width: 520px) {
+  .astro-badge-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.astro-badge-card {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid rgba(85, 189, 235, 0.2);
+  background: rgba(8, 13, 45, 0.6);
+  opacity: 0.6;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.astro-badge-card--unlocked {
+  opacity: 1;
+  border-color: var(--yellow-400);
+  background: rgba(240, 200, 104, 0.12);
+  box-shadow: 0 0 10px rgba(240, 200, 104, 0.2);
+}
+
+.astro-badge-card:hover {
+  opacity: 1;
+  transform: translateY(-2px);
+}
+
+.astro-badge-avatar {
+  font-size: 1.4rem;
+}
+
+.astro-badge-info strong {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--white);
+  line-height: 1.2;
+}
+
+.astro-badge-info small {
+  display: block;
+  font-size: 0.62rem;
+  color: #adbde2;
+}
+
+.astro-badge-card--unlocked .astro-badge-info small {
+  color: var(--yellow-400);
+  font-weight: 700;
+}
+
+/* Unlock Toast */
+.astro-unlocked-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.6rem 1rem;
+  background: linear-gradient(135deg, rgba(240, 200, 104, 0.28), rgba(72, 199, 142, 0.25));
+  border-bottom: 2px solid var(--yellow-400);
+  color: var(--white);
+  animation: picker-in 180ms ease-out;
+}
+
+.astro-unlocked-toast span {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--yellow-400);
+}
+
+.astro-unlocked-toast strong {
+  font-size: 0.85rem;
+}
+
+.toast-dismiss-btn {
+  background: rgba(244, 245, 255, 0.15);
+  border: 0;
+  border-radius: 50%;
+  color: var(--white);
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+}
+
+
